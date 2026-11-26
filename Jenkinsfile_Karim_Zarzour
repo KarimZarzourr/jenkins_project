@@ -1,0 +1,63 @@
+// Runs the same commands on Linux (sh) and Windows (bat).
+def run(String cmd) {
+    if (isUnix()) {
+        sh cmd
+    } else {
+        bat cmd
+    }
+}
+
+pipeline {
+    agent any
+
+    environment {
+        VIRTUAL_ENV = 'venv'
+    }
+
+    stages {
+        stage('Setup') {
+            steps {
+                script {
+                    // PYTHON_EXE can be set in Jenkins if python is not on the PATH
+                    def basePython = env.PYTHON_EXE ?: (isUnix() ? 'python3' : 'python')
+                    env.VENV_PY = isUnix() ? "${VIRTUAL_ENV}/bin/python" : "${VIRTUAL_ENV}\\Scripts\\python.exe"
+                    if (!fileExists("${env.WORKSPACE}/${VIRTUAL_ENV}")) {
+                        run("${basePython} -m venv ${VIRTUAL_ENV}")
+                    }
+                    run("${env.VENV_PY} -m pip install -r requirements.txt")
+                }
+            }
+        }
+
+        stage('Lint') {
+            steps {
+                script {
+                    run("${env.VENV_PY} -m flake8 app.py")
+                }
+            }
+        }
+
+        stage('Test') {
+            steps {
+                script {
+                    run("${env.VENV_PY} -m pytest -v")
+                }
+            }
+        }
+
+        stage('Deploy') {
+            steps {
+                script {
+                    // Deployment logic, e.g., pushing to a remote server
+                    echo "Deploying application..."
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            cleanWs()
+        }
+    }
+}
