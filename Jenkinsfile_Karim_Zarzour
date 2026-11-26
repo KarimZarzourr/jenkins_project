@@ -32,7 +32,7 @@ pipeline {
         stage('Lint') {
             steps {
                 script {
-                    run("${env.VENV_PY} -m flake8 app.py")
+                    run("${env.VENV_PY} -m flake8 app.py deploy.py")
                 }
             }
         }
@@ -45,17 +45,54 @@ pipeline {
             }
         }
 
+        stage('Coverage') {
+            steps {
+                script {
+                    run("${env.VENV_PY} -m coverage run -m pytest")
+                    run("${env.VENV_PY} -m coverage report -m --fail-under=80")
+                    run("${env.VENV_PY} -m coverage html")
+                    run("${env.VENV_PY} -m coverage xml")
+                }
+            }
+            post {
+                always {
+                    archiveArtifacts artifacts: 'htmlcov/**, coverage.xml', allowEmptyArchive: true
+                }
+            }
+        }
+
+        stage('Security Scan') {
+            steps {
+                script {
+                    // full report saved as an artifact, then fail the build on medium or high issues
+                    run("${env.VENV_PY} -m bandit app.py deploy.py -f txt -o bandit_report.txt --exit-zero")
+                    run("${env.VENV_PY} -m bandit app.py deploy.py -ll")
+                }
+            }
+            post {
+                always {
+                    archiveArtifacts artifacts: 'bandit_report.txt', allowEmptyArchive: true
+                }
+            }
+        }
+
         stage('Deploy') {
             steps {
                 script {
-                    // Deployment logic, e.g., pushing to a remote server
                     echo "Deploying application..."
+                    run("${env.VENV_PY} deploy.py")
                 }
             }
         }
     }
 
     post {
+        success {
+            echo "Pipeline finished: lint, tests, coverage and security scan passed, app deployed."
+        }
+        failure {
+            echo "Pipeline failed: check the stage marked red."
+        }
         always {
             cleanWs()
         }
